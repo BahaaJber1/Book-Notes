@@ -3,6 +3,7 @@ import bodyParser from "body-parser";
 import { Pool } from "pg";
 import dotevn from "dotenv";
 import { isValidEmail, isValidPassword, isValidUsername, isValidFirstName, isValidLastName, isPasswordMatch } from "./validators.js";
+import { emailExists, usernameExists, insertUser } from "./dbHelpers.js";
 dotevn.config();
 
 const db = new Pool({
@@ -24,12 +25,20 @@ app.get("/", (req, res) => {
     res.render("index.ejs");
 });
 
-app.get("/signup", (req, res) => {
+app.get("/signup", async (req, res) => {
     res.render("signup.ejs");
 });
 
-app.post("/register", (req, res) => {
+app.post("/register", async (req, res) => {
     const { email, username, password, firstName, lastName, matchPassword } = req.body;
+    const user = {
+        email: email,
+        username: username,
+        password: password,
+        firstName: firstName,
+        lastName: lastName,
+    };
+
     let errors = [];
 
     if (!isValidEmail(email)) {
@@ -41,25 +50,41 @@ app.post("/register", (req, res) => {
     if(!isValidUsername(username)) {
         errors.push("Username must be at least 3 characters long and can only contain letters, numbers, and underscores.");
     }
-    if(!isValidFirstName(req.body.firstName)) {
+    if(!isValidFirstName(firstName)) {
         errors.push("First name must be at least 2 characters long and can only contain letters.");
     }
-    if(!isValidLastName(req.body.lastName)) {
+    if(!isValidLastName(lastName)) {
         errors.push("Last name must be at least 2 characters long and can only contain letters.");
     }
     if(!isPasswordMatch(password, matchPassword)) {
         errors.push("Passwords do not match.");
     }
-    // if(!isValidPhoneNumber(req.body.phoneNumber)) {
+    // if(!isValidPhoneNumber(phoneNumber)) {
     //     errors.push("Invalid phone number format.");
     // }
 
-    console.log(email, username, password);
-    
-    if(errors.length > 0) {
+    console.log(email, username, password , firstName, lastName, matchPassword);
+    try {
+        
+        if (await emailExists(db, email)) {
+            errors.push("Email already exists.");
+        } 
+        if (await usernameExists(db, username)) {
+            errors.push("Username already exists.");
+        }
+        if (errors.length > 0) {
+            return res.render("signup.ejs", { errors });
+        } else {
+            const newUser = await insertUser(db, user);
+            console.log("User registered successfully:", newUser);
+            return res.redirect("/");
+        }
+
+    } catch (err) {
+        console.error("Error inserting user:", err);
+        errors.push("An error occurred while registering. Please try again later.");
         return res.render("signup.ejs", { errors });
     }
-    
 });
 
 app.listen(port, () => {
