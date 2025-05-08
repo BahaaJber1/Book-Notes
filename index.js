@@ -3,8 +3,8 @@ import bodyParser from "body-parser";
 import { Pool } from "pg";
 import dotevn from "dotenv";
 import bcrypt from "bcryptjs";
-import { isValidEmail, isValidPassword, isValidUsername, isValidFirstName, isValidLastName, isPasswordMatch } from "./validators.js";
-import { emailExists, usernameExists, insertUser } from "./dbHelpers.js";
+import { Validation } from "./validators.js";
+import { emailExists, usernameExists, insertUser, login } from "./dbHelpers.js";
 dotevn.config();
 
 const db = new Pool({
@@ -19,6 +19,7 @@ const db = new Pool({
 const app = express();
 const port = 3000;
 
+
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
@@ -26,9 +27,37 @@ app.get("/", (req, res) => {
     res.render("index.ejs");
 });
 
-app.get("/signup", async (req, res) => {
+app.get("/sign-up", async (req, res) => {
     res.render("signup.ejs");
 });
+
+app.get("/sign-in", async (req, res) => {
+    res.render("signin.ejs");
+});
+
+app.get("/explore", async (req, res) => {
+    res.render("explore.ejs");
+});
+
+
+app.post("/login", async (req, res) => {
+    const { username, password } = req.body;
+    const userCredentials = {
+        username: username,
+        password: password,
+    };
+    const errors = [];
+    
+    if(await login(db, userCredentials)) {
+        console.log("User logged in successfully:", userCredentials);
+        return res.redirect("/explore");
+    } else {
+        console.log("Invalid username or password:", userCredentials);
+        errors.push("Invalid username or password.");
+        return res.render("signin.ejs", { errors });
+    }
+});
+
 
 app.post("/register", async (req, res) => {
     const { email, username, password, firstName, lastName, matchPassword, phoneNumber} = req.body;
@@ -39,32 +68,10 @@ app.post("/register", async (req, res) => {
         firstName: firstName,
         lastName: lastName,
         phoneNumber: phoneNumber,
+        matchPassword: matchPassword,
     };
-
-    let errors = [];
-
-    if (!isValidEmail(email)) {
-        errors.push("Invalid email format");
-    }
-    if(!isValidPassword(password)) {
-        errors.push("Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.");
-    }
-    if(!isValidUsername(username)) {
-        errors.push("Username must be at least 3 characters long and can only contain letters, numbers, and underscores.");
-    }
-    if(!isValidFirstName(firstName)) {
-        errors.push("First name must be at least 2 characters long and can only contain letters.");
-    }
-    if(!isValidLastName(lastName)) {
-        errors.push("Last name must be at least 2 characters long and can only contain letters.");
-    }
-    if(!isPasswordMatch(password, matchPassword)) {
-        errors.push("Passwords do not match.");
-    }
-    // if(!isValidPhoneNumber(phoneNumber)) {
-    //     errors.push("Invalid phone number format.");
-    // }
-
+    const errors = Validation(user);
+    console.log(errors);
     console.log(email, username, password , firstName, lastName, matchPassword);
     try {
         
@@ -98,7 +105,7 @@ app.post("/register", async (req, res) => {
     }
 });
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0',() => {
     console.log("The Server is running on port " + port);
 });
 
