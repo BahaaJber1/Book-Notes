@@ -1,3 +1,6 @@
+import bcrypt from "bcryptjs";
+
+
 export async function emailExists(db, email) {
     const result = await db.query("SELECT * FROM users WHERE email = $1", [email]);
     return result.rows.length > 0;
@@ -24,11 +27,27 @@ export async function insertUser(db, user) {
             user.phoneNumber || null
         ]
     );
-
     return userId;
 }
 
-export async function getUserByEmail(db, email) {
-    const result = await db.query("SELECT id FROM users WHERE email = $1", [email]);
-    return result.rows[0];
+export async function cheackPassword(db, username, password) {
+    const result = await db.query("SELECT * FROM users WHERE username = $1", [username]);
+    if (result.rows.length > 0) {
+        const user = result.rows[0];
+        const isMatch = await bcrypt.compare(password, user.password);
+        return isMatch;
+    }
+    return false;
+}
+
+// still needs imporvement to limit attempts and lockout
+export async function login(db, userCredentials) {
+    const { username, password } = userCredentials;
+    if (await usernameExists(db, username)) {
+        if(await cheackPassword(db, username, password))
+        {
+            return true;
+        } 
+    }
+    return false;
 }
