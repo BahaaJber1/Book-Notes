@@ -10,7 +10,7 @@ export async function usernameExists(db, username) {
 
 export async function insertUser(db, user) {
     const result = await db.query(
-        "INSERT INTO users (email, username, password) VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO users (email, username, password) VALUES ($1, $2, $3) RETURNING *",
         [user.email, user.username, user.password]
     );
     const userId = result.rows[0].id;

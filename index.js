@@ -2,6 +2,7 @@ import express from "express";
 import bodyParser from "body-parser";
 import { Pool } from "pg";
 import dotevn from "dotenv";
+import bcrypt from "bcryptjs";
 import { isValidEmail, isValidPassword, isValidUsername, isValidFirstName, isValidLastName, isPasswordMatch } from "./validators.js";
 import { emailExists, usernameExists, insertUser } from "./dbHelpers.js";
 dotevn.config();
@@ -30,13 +31,14 @@ app.get("/signup", async (req, res) => {
 });
 
 app.post("/register", async (req, res) => {
-    const { email, username, password, firstName, lastName, matchPassword } = req.body;
+    const { email, username, password, firstName, lastName, matchPassword, phoneNumber} = req.body;
     const user = {
         email: email,
         username: username,
         password: password,
         firstName: firstName,
         lastName: lastName,
+        phoneNumber: phoneNumber,
     };
 
     let errors = [];
@@ -75,7 +77,16 @@ app.post("/register", async (req, res) => {
         if (errors.length > 0) {
             return res.render("signup.ejs", { errors });
         } else {
-            const newUser = await insertUser(db, user);
+            const hashedPassword = await bcrypt.hash(password, 10);
+            const userWithHashedPassword = {
+                email: email,
+                username: username,
+                password: hashedPassword,
+                firstName: firstName,
+                lastName: lastName,
+                phoneNumber: phoneNumber,
+            };
+            const newUser = await insertUser(db, userWithHashedPassword);
             console.log("User registered successfully:", newUser);
             return res.redirect("/");
         }
