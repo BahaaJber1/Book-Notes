@@ -5,6 +5,7 @@ import dotevn from "dotenv";
 import bcrypt from "bcryptjs";
 import { Validation } from "./validators.js";
 import { emailExists, usernameExists, insertUser, login } from "./dbHelpers.js";
+import session from "express-session";
 dotevn.config();
 
 const db = new Pool({
@@ -21,7 +22,20 @@ const port = 3000;
 
 
 app.use(bodyParser.urlencoded({ extended: true }));
+
 app.use(express.static("public"));
+
+app.use(session({
+    secret: process.env.SECRET, // Change this to a strong, random string in production!
+    resave: false,
+    saveUninitialized: false
+}));
+
+app.use((req, res, next) => {
+    res.locals.isLoggedIn = !!req.session.user;
+    res.locals.user = req.session.user || null;
+    next();
+});
 
 app.get("/", (req, res) => {
     res.render("index.ejs");
@@ -50,6 +64,7 @@ app.post("/login", async (req, res) => {
     
     if(await login(db, userCredentials)) {
         console.log("User logged in successfully:", userCredentials);
+        req.session.user = userCredentials.username; // Store the username in the session
         return res.redirect("/explore");
     } else {
         console.log("Invalid username or password:", userCredentials);
@@ -103,6 +118,12 @@ app.post("/register", async (req, res) => {
         errors.push("An error occurred while registering. Please try again later.");
         return res.render("signup.ejs", { errors });
     }
+});
+
+app.get("/logout", (req, res) => {
+    req.session.destroy(() => {
+        res.redirect("/");
+    });
 });
 
 app.listen(port, '0.0.0.0',() => {
