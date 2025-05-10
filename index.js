@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { Validation } from "./validators.js";
 import { emailExists, usernameExists, insertUser, login } from "./dbHelpers.js";
 import session from "express-session";
+import axios from "axios";
 dotevn.config();
 
 const db = new Pool({
@@ -34,6 +35,7 @@ app.use(session({
 app.use((req, res, next) => {
     res.locals.isLoggedIn = !!req.session.user;
     res.locals.user = req.session.user || null;
+    res.locals.userId = req.session.userId || null;
     next();
 });
 
@@ -53,21 +55,84 @@ app.get("/explore", async (req, res) => {
     res.render("explore.ejs");
 });
 
+app.get("/add-note", async (req, res) => {
+    const { bookTitle, bookAuthor, coverUrl } = req.query;
+    if (bookTitle && bookAuthor && coverUrl) {
+        // Show the note form with book details
+        return res.render("booknote.ejs", {
+            isExists: true,
+            bookTitle,
+            bookAuthor,
+            coverUrl,
+            note: ""
+        });
+    }
+    // Show the initial form to enter a book title
+    res.render("booknote.ejs", { isExists: false });
+});
+
+app.post('/booknote', async (req, res) => {
+    const userId = req.session.userId;
+    const { bookTitle, bookAuthor, coverUrl, note } = req.body;
+    const result = await db.query(
+        "INSERT INTO books (user_id, title, author, cover_url, note) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        [userId, bookTitle, bookAuthor, coverUrl, note]
+    );
+    const book = result.rows[0];
+    res.redirect("/explore");
+});
+    
+
+
+app.post("/get-cover", async (req, res) => {
+    const bookTitle = req.body.title;
+    if (!bookTitle) {
+        return res.render("booknote.ejs", { isExists: false, error: "Please enter a book title." });
+    }
+    const searchURL = `https://openlibrary.org/search.json?title=${encodeURIComponent(bookTitle)}`;
+    const size = 'M';
+    try {
+        const response = await axios.get(searchURL);
+        const data = response.data;
+        if (data.docs.length > 0) {
+            const bookWithCover = data.docs.find(doc => doc.cover_i);
+            const bookAuthor = bookWithCover.author_name ? bookWithCover.author_name.join(", ") : "Unknown";
+            const coverUrl = `https://covers.openlibrary.org/b/id/${bookWithCover.cover_i}-${size}.jpg`;
+            const bookTitle = bookWithCover.title;
+            return res.render("booknote.ejs", {
+                isExists: true,
+                bookTitle,
+                bookAuthor,
+                coverUrl,
+                note: ""
+            });
+        } else {
+            return res.render("booknote.ejs", { isExists: false, error: "No cover found for this book." });
+        }
+    } catch (error) {
+        console.error('Error fetching book cover:', error.message);
+        return res.status(500).json({ error: 'Failed to fetch book cover.' });
+    }
+});
 
 app.post("/login", async (req, res) => {
     const { username, password } = req.body;
-    const userCredentials = {
-        username: username,
-        password: password,
-    };
+    const userCredentials = { username, password };
     const errors = [];
-    
-    if(await login(db, userCredentials)) {
-        console.log("User logged in successfully:", userCredentials);
-        req.session.user = userCredentials.username; // Store the username in the session
-        return res.redirect("/explore");
+
+    // Check credentials
+    if (await login(db, userCredentials)) {
+        // Fetch user row to get the user ID
+        const userRow = await db.query("SELECT id FROM users WHERE username = $1", [username]);
+        if (userRow.rows.length > 0) {
+            req.session.userId = userRow.rows[0].id;
+            req.session.user = username;
+            return res.redirect("/explore");
+        } else {
+            errors.push("User not found.");
+            return res.render("signin.ejs", { errors });
+        }
     } else {
-        console.log("Invalid username or password:", userCredentials);
         errors.push("Invalid username or password.");
         return res.render("signin.ejs", { errors });
     }
