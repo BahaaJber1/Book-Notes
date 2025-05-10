@@ -4,7 +4,7 @@ import { Pool } from "pg";
 import dotevn from "dotenv";
 import bcrypt from "bcryptjs";
 import { Validation } from "./validators.js";
-import { emailExists, usernameExists, insertUser, login } from "./dbHelpers.js";
+import { emailExists, usernameExists, insertUser, login, getBooks } from "./dbHelpers.js";
 import session from "express-session";
 import axios from "axios";
 dotevn.config();
@@ -31,6 +31,12 @@ app.use(session({
     resave: false,
     saveUninitialized: false
 }));
+function requireLogin(req, res, next) {
+    if (!req.session.userId) {
+        return res.redirect("/sign-in");
+    }
+    next();
+}
 
 app.use((req, res, next) => {
     res.locals.isLoggedIn = !!req.session.user;
@@ -52,10 +58,11 @@ app.get("/sign-in", async (req, res) => {
 });
 
 app.get("/explore", async (req, res) => {
-    res.render("explore.ejs");
+    const result = await getBooks(db);
+    res.render("explore.ejs", { books: result });
 });
 
-app.get("/add-note", async (req, res) => {
+app.get("/add-note", requireLogin, async (req, res) => {
     const { bookTitle, bookAuthor, coverUrl } = req.query;
     if (bookTitle && bookAuthor && coverUrl) {
         // Show the note form with book details
@@ -71,7 +78,7 @@ app.get("/add-note", async (req, res) => {
     res.render("booknote.ejs", { isExists: false });
 });
 
-app.post('/booknote', async (req, res) => {
+app.post('/booknote', requireLogin, async (req, res) => {
     const userId = req.session.userId;
     const { bookTitle, bookAuthor, coverUrl, note } = req.body;
     const result = await db.query(
@@ -84,7 +91,7 @@ app.post('/booknote', async (req, res) => {
     
 
 
-app.post("/get-cover", async (req, res) => {
+app.post("/get-cover", requireLogin, async (req, res) => {
     const bookTitle = req.body.title;
     if (!bookTitle) {
         return res.render("booknote.ejs", { isExists: false, error: "Please enter a book title." });
