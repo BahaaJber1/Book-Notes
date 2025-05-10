@@ -51,3 +51,9 @@ export async function login(db, userCredentials) {
     }
     return false;
 }
+
+
+export async function getBooks(db) {
+    const result = await db.query("SELECT * FROM books");
+    return result.rows;
+}
